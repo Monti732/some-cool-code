@@ -1,1 +1,4 @@
 /image.png
+build
+dist
+makeOverlayImages.spec

@@ -1,27 +1,36 @@
-from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QPushButton
-from PyQt6.QtGui import QPixmap, QMouseEvent, QWheelEvent, QImage, QKeyEvent
+from PyQt6.QtWidgets import QApplication, QWidget, QLabel
+from PyQt6.QtGui import QPixmap, QMouseEvent, QWheelEvent, QImage
 from PyQt6.QtCore import Qt, QPoint
 import sys
+import os
 
 class TransparentWindow(QWidget):
     def __init__(self):
         super().__init__()
+
+        # Окно без рамок и всегда сверху
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setStyleSheet("background-color: rgba(0, 0, 0, 0);")  # Полностью прозрачный фон окна
 
         # Загружаем изображение
         self.image_label = QLabel(self)
-        self.image = QPixmap("image.png")  # Укажите путь к вашему изображению
+        self.image = QPixmap()  # Изначально пустое изображение
         self.opacity = 150  # Прозрачность (0 - полностью прозрачное, 255 - непрозрачное)
         self.update_image_opacity()
 
         self.image_label.setScaledContents(True)
 
         # Начальный размер окна (по размеру изображения)
-        self.resize(self.image.width(), self.image.height())
-        self.image_label.resize(self.size())
+        self.resize(300, 300)  # Размер по умолчанию, если изображение не загружено
 
+        # Создаем метку для зоны перетаскивания
+        self.drag_zone = QLabel(self)
+        self.drag_zone.setText("Перетащите изображение сюда")
+        self.drag_zone.setStyleSheet("background-color: rgba(0, 0, 0, 50); color: white; border: 2px dashed gray; padding: 20px;")
+        self.drag_zone.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.drag_zone.resize(self.size())
+        
         # Флаги для обработки событий
         self.dragging = False
         self.resizing = False
@@ -29,19 +38,14 @@ class TransparentWindow(QWidget):
         self.drag_start = QPoint()
         self.scale_factor = 1.0  # Коэффициент масштабирования
 
-        # Кнопка для выхода
-        self.exit_button = QPushButton("X", self)
-        self.exit_button.setStyleSheet("background-color: red; color: white; border-radius: 10px;")
-        self.exit_button.clicked.connect(self.close_application)
-        self.exit_button.resize(30, 30)
-        self.exit_button.move(self.width() - 40, 10)  # Размещаем в верхнем правом углу
-
-    def close_application(self):
-        """Закрытие приложения"""
-        QApplication.quit()  # Завершаем выполнение приложения
+        # Устанавливаем для окна перетаскивание
+        self.setAcceptDrops(True)
 
     def update_image_opacity(self):
         """Создаёт полупрозрачное изображение, сохраняя черный цвет"""
+        if self.image.isNull():
+            return  # Если изображение не загружено, ничего не делаем
+
         image = self.image.toImage().convertToFormat(QImage.Format.Format_ARGB32)
         for y in range(image.height()):
             for x in range(image.width()):
@@ -51,7 +55,7 @@ class TransparentWindow(QWidget):
                     image.setPixelColor(x, y, pixel)
         self.image_label.setPixmap(QPixmap.fromImage(image))
 
-    def keyPressEvent(self, event: QKeyEvent):
+    def keyPressEvent(self, event):
         """Обрабатывает нажатие клавиш, например, Ctrl+Q для выхода"""
         if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_Q:
             self.close_application()  # Закрытие приложения при Ctrl+Q
@@ -107,6 +111,30 @@ class TransparentWindow(QWidget):
             self.opacity += int(delta * 15)
             self.opacity = max(10, min(255, self.opacity))  # Ограничиваем от 10 до 255
             self.update_image_opacity()  # Применяем новую прозрачность
+
+    def dragEnterEvent(self, event):
+        """Обрабатывает событие перетаскивания файлов в окно"""
+        if event.mimeData().hasUrls():
+            event.accept()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        """Обрабатывает событие отпускания файла в окно"""
+        urls = event.mimeData().urls()
+        if urls:
+            file_path = urls[0].toLocalFile()  # Путь к файлу
+            if os.path.isfile(file_path) and file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+                self.load_image(file_path)  # Загружаем изображение
+
+    def load_image(self, file_path):
+        """Загружает изображение в окно"""
+        self.image = QPixmap(file_path)
+        self.update_image_opacity()
+        self.resize(self.image.width(), self.image.height())
+        self.image_label.resize(self.size())  # Изменяем размер изображения
+        self.drag_zone.hide()  # Скрываем зону перетаскивания
+
 
 app = QApplication(sys.argv)
 window = TransparentWindow()
